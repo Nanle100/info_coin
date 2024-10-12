@@ -18,7 +18,7 @@ contract DataPackageManager is ReentrancyGuard {
         uint256 packageId;
         uint256 expirationDate;
         bool isActive;
-        string provider; // Moved here for optimization
+        string provider;
     }
 
     mapping(uint256 => DataPackage) public dataPackages;
@@ -52,6 +52,7 @@ contract DataPackageManager is ReentrancyGuard {
         string indexed mobileNumber,
         uint256 indexed dataAmount
     );
+    event TokensWithdrawn(address indexed owner, uint256 amount);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not the contract owner");
@@ -60,8 +61,8 @@ contract DataPackageManager is ReentrancyGuard {
 
     constructor(address _acceptedToken) {
         require(_acceptedToken != address(0), "Invalid token address");
-        owner = msg.sender;
         acceptedToken = IERC20(_acceptedToken);
+        owner = msg.sender;
     }
 
     function addDataPackage(
@@ -95,7 +96,7 @@ contract DataPackageManager is ReentrancyGuard {
             "Insufficient payment"
         );
 
-        // Validate mobile number length (e.g., must be 10-15 characters)
+        // Validate mobile number length
         require(
             bytes(_mobileNumber).length >= 10 &&
                 bytes(_mobileNumber).length <= 15,
@@ -115,6 +116,7 @@ contract DataPackageManager is ReentrancyGuard {
             true,
             provider
         );
+
         emit SubscriptionCreated(
             msg.sender,
             _mobileNumber,
@@ -132,6 +134,7 @@ contract DataPackageManager is ReentrancyGuard {
     function renewSubscription(uint256 _amount) public nonReentrant {
         require(msg.sender != address(0), "Invalid caller address");
         require(subscriptions[msg.sender].isActive, "No active subscription");
+        require(!isSubscriptionExpired(msg.sender), "Subscription is expired");
         require(
             _amount >= dataPackages[subscriptions[msg.sender].packageId].price,
             "Insufficient payment"
@@ -143,6 +146,7 @@ contract DataPackageManager is ReentrancyGuard {
         );
 
         subscriptions[msg.sender].expirationDate += 30 days;
+
         emit SubscriptionRenewed(
             msg.sender,
             subscriptions[msg.sender].packageId,
@@ -152,7 +156,6 @@ contract DataPackageManager is ReentrancyGuard {
 
     function cancelSubscription() public {
         require(msg.sender != address(0), "Invalid caller address");
-
         require(subscriptions[msg.sender].isActive, "No active subscription");
 
         subscriptions[msg.sender].isActive = false;
@@ -169,7 +172,6 @@ contract DataPackageManager is ReentrancyGuard {
             subscription.expirationDate > block.timestamp;
     }
 
-    // New function to check if a subscription is expired
     function isSubscriptionExpired(address user) public view returns (bool) {
         Subscription storage subscription = subscriptions[user];
         return
@@ -181,5 +183,6 @@ contract DataPackageManager is ReentrancyGuard {
         uint256 balance = acceptedToken.balanceOf(address(this));
         require(balance > 0, "No tokens to withdraw");
         acceptedToken.transfer(owner, balance);
+        emit TokensWithdrawn(owner, balance);
     }
 }
